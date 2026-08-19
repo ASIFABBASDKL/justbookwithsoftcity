@@ -10,8 +10,9 @@
 | **Vision** | Hybrid marketplace — Fiverr (gigs) + Upwork (job posting + bidding) dono ek platform pe |
 | **Stack** | Laravel 12 · PHP 8.2 · MySQL · Firebase · Gemini AI · SMTP |
 | **Plan banaya** | 19 August 2026 |
-| **Current Phase** | **Phase 0 — Foundation Fix (shuru nahi hua)** |
-| **Overall Progress** | ~15% (existing base) |
+| **Current Phase** | **Phase 0 — Foundation Fix (chal raha hai — 7/28)** |
+| **Overall Progress** | ~17% |
+| **Aakhri kaam** | 19 Aug 2026 — cleanup: extra modules delete, broken code fix |
 
 ---
 
@@ -131,7 +132,10 @@ Seller withdraw kare → Stripe Connect payout
 
 ## 3. Jo Ho Chuka Hai — Current Inventory
 
-**Abhi tak:** 22 controllers · ~74 API endpoints · 22 tables · 0 tests · 0 auth
+**Abhi (cleanup ke baad):** 16 controllers · **59 API endpoints** · 15 models · 17 migrations · 3,307 lines · 0 tests · 0 auth
+
+> **19 Aug 2026 ka cleanup:** 4 poore modules + dead code delete hue. **-1,371 lines**.
+> (74 → 59 routes, 22 → 16 controllers, 22 → 15 models). Tafseel neeche "Cleanup Log" mein.
 
 ### Modules
 
@@ -151,12 +155,12 @@ Seller withdraw kare → Stripe Connect payout
 | **Services & Pricing** | Category/subcategory/price/duration | Gigs + packages | **30%** |
 | **Payment Methods** | Bank/PayPal/Stripe account details store | Stripe Connect replace karega | **20%** |
 | **Privacy & Security** | Accept/reject terms | Rakh sakte hain | **50%** |
-| **Service Areas** | City/building/floor + lat/long | **DROP** | 0% |
-| **Enable Location** | Live location toggle | **DROP** | 0% |
-| **Availability** | 7 din ka start/end time schedule | **DROP** | 0% |
-| **Calling** | Agora audio/video (adhoora — dead code) | Backlog | 0% |
+| ~~Service Areas~~ | City/building/floor + lat/long | ✅ **DELETED** (19 Aug) | — |
+| ~~Enable Location~~ | Live location toggle | ✅ **DELETED** (19 Aug) | — |
+| ~~Availability~~ | 7 din ka start/end time schedule | ✅ **DELETED** (19 Aug) | — |
+| ~~Calling~~ | Agora audio/video (dead code tha) | ✅ **DELETED** (19 Aug) | — |
 
-### Existing Tables (22)
+### Current Tables (17 migrations)
 
 ```
 RAKHENGE (thodi tabdeeli ke saath)
@@ -166,14 +170,41 @@ RAKHENGE (thodi tabdeeli ke saath)
    two_step_verifications · biometric_logins · chat_with_ai
    cache · jobs (queue) · sessions · password_reset_tokens
 
-BADLENGE
+BADLENGE (Phase 1-2 mein)
    services_and_pricing  →  gigs + gig_packages + gig_extras
    bookings              →  orders
    payments              →  Stripe Connect
 
-HATAYENGE
-   availabilities · service_areas · enable_locations · settings (khali) · calls
+✅ HAT CHUKE (19 Aug 2026)
+   availabilities · service_areas · enable_locations · settings · calls
 ```
+
+### 📋 Cleanup Log — 19 August 2026
+
+**Delete hua** (commit `aaeb55c`):
+
+| Kya | Files |
+|---|---|
+| Availability module | controller, model, migration, seeder |
+| ServiceArea module | controller, model, migration, seeder |
+| EnableLocation module | controller, model, migration, seeder |
+| Calling / Agora | CallController, Call model, migration, AgoraService, RtcTokenBuilder helper |
+| settings migration | khali table thi |
+| Unused mail scaffolding | MailController, `App\Mail\Mail`, PhoneNumberUpdatedMail + view |
+| Commented dead code | ~170 lines (AuthController, ChatWithAiController mein purane duplicate versions) |
+
+**Saath mein theek hua:**
+
+- `B-1` `/bookings/{id}/cancel` route hataya — `cancelBookingApi` method exist hi nahi karta tha
+- `B-2` `GET /reviews` route hataya — `getReviews` method exist nahi karta tha
+- `B-3` `User::role()` relation hataya — `Role::class` exist nahi karta
+- `Review::serviceProvider()` — ServiceArea ke zariye ka toota `hasOneThrough` seedhe `belongsTo` se badla
+- `ServiceProvider` model se `availability()` / `enableLocation()` relations hatayin
+- `composer.json` se Agora ka `autoload.files` entry hatayi
+- `DatabaseSeeder` se deleted seeders ke calls hatae
+- `routes/api.php` sections mein organize kiya + har section pe migration TODO comment
+
+**Verify hua:** saari PHP files syntax-clean · koi dangling reference nahi · `composer dump-autoload` OK · 59 routes load ho rahe hain
 
 ### Strengths — Jo Achha Bana Hua Hai
 
@@ -192,21 +223,22 @@ HATAYENGE
 ### CRITICAL — Security
 
 - [ ] **C-1 — Koi authentication nahi hai.** Sanctum installed hai lekin kahin use nahi hua. Na `HasApiTokens` trait, na `auth:sanctum` middleware. **Saare 74 endpoints khule hain** — koi bhi `/withdraw` call karke paisa nikaal sakta hai.
-- [ ] **C-2 — Firebase private key leak ka khatra.** `.gitignore:20` mein path `/storage/firebase/...` hai lekin file `storage/app/firebase/firebase_credentials.json` par hai → ignore nahi ho rahi. **Fix + key rotate dono karne hain.**
-- [ ] **C-3 — Project git repo hi nahi hai.** Koi version control nahi. Ek galti = poora kaam gaya.
+- [ ] **C-2 — Firebase private key.** ✅ `.gitignore` path fix ho gaya (ab `storage/app/firebase/...`) — file git mein nahi jayegi. ⚠️ **Baqi hai: key rotate karna** (Firebase Console → Service Accounts → naya key generate karo, purana revoke karo).
+- [x] **C-3 — ~~Project git repo hi nahi hai~~** ✅ **HO GAYA** (19 Aug) — git init + baseline commit `24ad1eb`
 - [ ] **C-4 — Register response mein OTP wapas aata hai** (`'phone_otp' => $phoneOtp`). Production mein OTP ka matlab hi khatam.
 - [ ] **C-5 — Phone OTP kabhi SMS se bheja hi nahi jata.** Sirf cache mein rakha jata hai. SMS gateway (Twilio) lagana hai.
 - [ ] **C-6 — Koi rate limiting nahi.** OTP/login endpoints pe brute force khula hua hai.
 - [ ] **C-7 — `APP_DEBUG=true`** — production pe stack traces expose honge.
 - [ ] **C-8 — `env()` seedha controller mein** (`ChatWithAiController`) — config cache ke baad `null` ho jayegi.
 
-### BROKEN — Toota Hua Code
+### BROKEN — Toota Hua Code ✅ SAB THEEK HO GAYE (19 Aug)
 
-- [ ] **B-1** — `POST /bookings/{id}/cancel` → `cancelBookingApi` method exist hi nahi karta → **500 error**
-- [ ] **B-2** — `GET /reviews` → `getReviews` method exist nahi karta → **500 error**
-- [ ] **B-3** — `User::role()` relation `Role::class` ko point karta hai jo exist nahi karta → crash
-- [ ] **B-4** — AgoraService dead code — na route, na `AGORA_APP_ID` env var
-- [ ] **B-5** — `settings` table bilkul khali hai (sirf id + timestamps)
+- [x] **B-1** — ~~`POST /bookings/{id}/cancel` → `cancelBookingApi` missing~~ → route hataya
+- [x] **B-2** — ~~`GET /reviews` → `getReviews` missing~~ → route hataya
+- [x] **B-3** — ~~`User::role()` → `Role::class` exist nahi karta~~ → relation hataya
+- [x] **B-4** — ~~AgoraService dead code~~ → poora Agora module delete
+- [x] **B-5** — ~~`settings` table khali~~ → migration delete (Phase 4 mein `platform_settings` banega)
+- [x] **B-6** — ~~`Review::serviceProvider()` ka toota `hasOneThrough` (ServiceArea ke zariye)~~ → seedha `belongsTo` kiya
 
 ### LOGIC / DESIGN
 
@@ -328,17 +360,23 @@ HATAYENGE
 ---
 
 ### PHASE 0 — Foundation Fix
-**Time: 2-3 hafte** · **Status: NOT STARTED** · **Progress: 0/28**
+**Time: 2-3 hafte** · **Status: 🟡 IN PROGRESS** · **Progress: 7/29**
 
 > Ye phase kuch naya feature nahi deta, lekin **iske bina aage kuch nahi ban sakta**. Har agla phase isi pe khara hai.
 
 #### 0.1 — Version Control & Environment
-- [ ] Git repo initialize karo, `.gitignore` verify karo
-- [ ] `.gitignore` mein Firebase creds ka **sahi path** likho: `storage/app/firebase/firebase_credentials.json`
-- [ ] Firebase service account key **rotate** karo (purani compromised samjho)
-- [ ] Gemini API key rotate karo
+- [x] Git repo initialize karo, `.gitignore` verify karo ✅ *(19 Aug — commit `24ad1eb`)*
+- [x] `.gitignore` mein Firebase creds ka **sahi path** likho: `storage/app/firebase/firebase_credentials.json` ✅ *(19 Aug)*
+- [ ] ⚠️ **Firebase service account key rotate karo** (purani compromised samjho) — *ye abhi baqi hai*
+- [ ] ⚠️ **Gemini API key rotate karo** — *ye bhi baqi hai*
 - [ ] `.env.example` update karo (saare naye vars ke saath)
 - [ ] `APP_DEBUG=false` production ke liye, separate `.env.production`
+
+#### 0.1b — Cleanup (extra cheezein hatana) ✅ COMPLETE
+- [x] Availability / ServiceArea / EnableLocation / Calling modules delete ✅ *(19 Aug — commit `aaeb55c`)*
+- [x] Dead code delete: AgoraService, RtcTokenBuilder, MailController, unused Mailables ✅
+- [x] ~170 lines commented-out duplicate code hatao ✅
+- [x] `routes/api.php` sections mein organize karo ✅
 
 #### 0.2 — Authentication (SABSE AHEM)
 - [ ] `User` model mein `HasApiTokens` trait lagao
@@ -350,12 +388,13 @@ HATAYENGE
 - [ ] Register response se OTP hatao
 - [ ] SMS gateway (Twilio) integrate karo phone OTP ke liye
 
-#### 0.3 — Broken Code Fix
-- [ ] `cancelBookingApi` banao ya route hatao (B-1)
-- [ ] `getReviews` banao ya route hatao (B-2)
-- [ ] `User::role()` relation hatao (B-3)
-- [ ] AgoraService: ya complete karo ya delete karo (B-4)
-- [ ] `settings` table drop karo → `platform_settings` banao (B-5)
+#### 0.3 — Broken Code Fix ✅ COMPLETE *(19 Aug — commit `aaeb55c`)*
+- [x] `cancelBookingApi` — route hataya (B-1)
+- [x] `getReviews` — route hataya (B-2)
+- [x] `User::role()` relation hataya (B-3)
+- [x] AgoraService delete kiya (B-4)
+- [x] `settings` migration delete → `platform_settings` Phase 4 mein banega (B-5)
+- [x] `Review::serviceProvider()` ka toota `hasOneThrough` fix (B-6)
 
 #### 0.4 — Role System Rework
 - [ ] `users.role` enum hatao → `is_seller` / `is_buyer` boolean flags
@@ -717,14 +756,14 @@ HATAYENGE
 
 | Phase | Kya | Time | Tasks | Done | Status |
 |---|---|---|---|---|---|
-| **0** | Foundation Fix | 2-3 hafte | 28 | 0 | 🔴 Not Started |
+| **0** | Foundation Fix | 2-3 hafte | 29 | **7** | 🟡 **In Progress (24%)** |
 | **1** | Fiverr Path + Order Engine | 5-6 hafte | 32 | 0 | ⚪ Waiting |
 | **2** | Payment & Escrow | 6-8 hafte | 26 | 0 | ⚪ Waiting |
 | **3** | Upwork Path (Jobs + Bidding) | 4-5 hafte | 22 | 0 | ⚪ Waiting |
 | **4** | Admin + Trust & Safety | 3-4 hafte | 20 | 0 | ⚪ Waiting |
 | **5** | Growth & Polish | 4-5 hafte | 18 | 0 | ⚪ Waiting |
 | **6** | Backlog | — | 11 | 0 | ⚪ Future |
-| | **TOTAL (Phase 0-5)** | **~6-8 mahine** | **146** | **0** | **0%** |
+| | **TOTAL (Phase 0-5)** | **~6-8 mahine** | **147** | **7** | **5%** |
 
 ### Milestones
 
@@ -739,14 +778,28 @@ HATAYENGE
 
 ## Agla Qadam (Abhi Kya Karna Hai)
 
-**Phase 0 ke pehle 3 kaam — is tarteeb se:**
+✅ ~~Git repo initialize~~ — **ho gaya**
+✅ ~~`.gitignore` firebase path fix~~ — **ho gaya**
+✅ ~~Extra modules + dead code cleanup~~ — **ho gaya**
 
-1. **Git repo initialize karo** — abhi version control hai hi nahi. Ek galti se poora kaam ja sakta hai.
-2. **Firebase key rotate + `.gitignore` path fix** — leak ho chuki samjho.
-3. **Sanctum authentication lagao** — 74 khule endpoints band karo.
+**Ab ye 3 kaam, is tarteeb se:**
 
-Ye teen hone ke baad baqi Phase 0 aaram se chalega.
+1. ⚠️ **Firebase + Gemini keys rotate karo** — `.gitignore` fix ho chuka hai lekin purani keys expose ho chuki thin. Firebase Console → Project Settings → Service Accounts → naya key generate karo, purana revoke karo. Gemini key Google AI Studio se.
+   *(Ye sirf tum kar sakte ho — console access chahiye.)*
+
+2. 🔐 **Sanctum authentication lagao** (Phase 0.2) — **59 endpoints abhi bhi khule hain**. `/withdraw` bhi khula hai. Ye sabse zaroori kaam hai.
+
+3. 🏗️ **Role system rework** (Phase 0.4) — `role` enum hatao, user buyer+seller dono ban sake. Ye Phase 1 se pehle hona zaroori hai warna baad mein migration mushkil hogi.
 
 ---
 
-*Aakhri update: 19 August 2026 — plan banaya gaya, kaam shuru nahi hua.*
+## Changelog
+
+| Tareekh | Commit | Kya Hua |
+|---|---|---|
+| 19 Aug 2026 | `24ad1eb` | Git repo initialize + baseline commit (147 files). `.gitignore` mein Firebase creds ka path fix |
+| 19 Aug 2026 | `aaeb55c` | Cleanup — 4 modules + dead code delete (**-1,371 lines**). B-1 se B-6 tak saare broken code fix. 74 → 59 routes |
+
+---
+
+*Aakhri update: 19 August 2026 — Phase 0 chal raha hai (7/29).*
