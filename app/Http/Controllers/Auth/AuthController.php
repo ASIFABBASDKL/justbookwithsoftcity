@@ -19,78 +19,6 @@ class AuthController extends Controller
     /**
      * Register API - create a new user (API).
      */
-    // public function registerApi(Request $request)
-    // {
-    //     $request->validate([
-    //         'fullname' => 'required|string|max:255',
-    //         'email' => 'required|string|email|max:255|unique:users',
-    //         'phone_number' => 'required|string|max:20|unique:users',
-    //         'password' => 'required|string|min:6',
-    //         'role' => 'in:user,provider',
-    //         'device_token' => 'nullable|string|max:500', // 🔹 device token validation
-    //     ]);
-
-    //     $user = User::create([
-    //         'fullname' => $request->fullname,
-    //         'email' => $request->email,
-    //         'phone_number' => $request->phone_number,
-    //         'password' => Hash::make($request->password),
-    //         'role' => $request->role ?? 'user',
-    //         'device_token' => $request->device_token, // 🔹 save device token
-    //     ]);
-
-    //     // ✅ Role check → record create karo
-    //     if ($user->role === 'provider') {
-    //         $provider = ServiceProvider::create([
-    //             'user_id' => $user->id,
-    //         ]);
-    //         $relatedId = $provider->id;
-    //         $relatedType = 'service_provider_id';
-            
-    //     // ✅ Wallet create for provider
-    //     Wallet::create([
-    //         'service_provider_id' => $provider->id,
-    //         'total_amount' => 0.00,
-    //         'total_available_amount' => 0.00,
-    //         'total_withdrawal_amount' => 0.00,
-    //     ]);
-
-
-    //     } else {
-    //         $serviceUser = ServiceUser::create([
-    //             'user_id' => $user->id,
-    //         ]);
-    //         $relatedId = $serviceUser->id;
-    //         $relatedType = 'service_user_id';
-    //     }
-
-    //     // ✅ Phone OTP
-    //     $phoneOtp = rand(100000, 999999);
-    //     cache()->put("phone_otp_{$user->phone_number}", $phoneOtp, now()->addMinutes(10));
-
-    //     // ✅ Email OTP
-    //     $emailOtp = rand(100000, 999999);
-    //     cache()->put("email_otp_{$user->email}", $emailOtp, now()->addMinutes(10));
-    //     Mail::to($user->email)->send(new EmailOtpMail($emailOtp));
-
-    //     return response()->json([
-    //         'status' => true,
-    //         'message' => 'User registered successfully. Verify your phone & email.',
-    //         'phone_otp' => $phoneOtp,   // sirf testing ke liye
-    //         'email_otp' => $emailOtp,   // sirf testing ke liye
-    //         'data' => [
-    //             'user_id' => $user->id,
-    //             $relatedType => $relatedId,
-    //             'fullname' => $user->fullname,
-    //             'email' => $user->email,
-    //             'phone_number' => $user->phone_number,
-    //             'role' => $user->role,
-    //             'device_token' => $user->device_token, // 🔹 response me bhi bhej diya
-    //         ],
-    //     ], 200);
-    // }
-    
-    
     public function registerApi(Request $request)
     {
         $request->validate([
@@ -211,49 +139,6 @@ class AuthController extends Controller
             'message' => 'Invalid or expired OTP',
         ], 404);
     }
-    /**
-     * Login API - authenticate a user (API).
-     **/
-    // public function loginApi(Request $request)
-    // {
-    //     $request->validate([
-    //         'email' => 'required|email',
-    //         'password' => 'required',
-    //         'device_token' => 'nullable|string|max:500', // 🔹 device token
-    //     ]);
-
-    //     if (Auth::attempt($request->only('email', 'password'))) {
-    //         $user = Auth::user();
-
-    //         // ✅ Prevent login if phone is not verified
-    //         if (!$user->hasVerifiedPhone()) {
-    //             Auth::logout();
-    //             return response()->json([
-    //                 'status' => false,
-    //                 'message' => 'Please verify your phone number before login.',
-    //             ], 403);
-    //         }
-
-    //         // ✅ Device token update logic
-    //         if ($request->filled('device_token')) {
-    //             if ($user->device_token !== $request->device_token) {
-    //                 $user->update(['device_token' => $request->device_token]);
-    //             }
-    //         }
-
-    //         return response()->json([
-    //             'status' => true,
-    //             'message' => 'Login successful',
-    //             'data' => $user,
-    //         ], 200);
-    //     }
-
-    //     return response()->json([
-    //         'status' => false,
-    //         'message' => 'Invalid credentials',
-    //     ], 404);
-    // }
-    
     /**
      * Login API - authenticate a user (API).
      **/

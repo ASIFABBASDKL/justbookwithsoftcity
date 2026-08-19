@@ -5,8 +5,6 @@ namespace App\Http\Controllers\ServiceProvider;
 use App\Http\Controllers\Controller;
 use App\Models\ServiceProvider;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Mail;
-use App\Mail\PhoneNumberUpdatedMail;
 use App\Models\Review;
 use App\Models\Booking;
 use App\Models\ServiceAndPricing;
@@ -97,11 +95,6 @@ class ServiceProviderController extends Controller
         $serviceProvider->update([
             'country' => $data['country'] ?? $serviceProvider->country,
         ]);
-
-        // ✅ Send mail if phone changed
-        // if ($oldPhone !== $newPhone) {
-        //     Mail::to($user->email)->send(new PhoneNumberUpdatedMail($user, $oldPhone, $newPhone));
-        // }
 
         return response()->json([
             'status' => true,

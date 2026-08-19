@@ -40,16 +40,9 @@ class Review extends Model
         return $this->belongsTo(ServiceUser::class, 'service_user_id');
     }
 
-    // Through booking -> service_area -> service_provider
+    // Review belongs to a Service Provider
     public function serviceProvider()
     {
-        return $this->hasOneThrough(
-            ServiceProvider::class,
-            ServiceArea::class,
-            'id',                   // ServiceArea.id
-            'id',                   // ServiceProvider.id
-            'booking_id',           // Review.booking_id -> Booking.id
-            'service_provider_id'   // ServiceArea.service_provider_id
-        );
+        return $this->belongsTo(ServiceProvider::class, 'service_provider_id');
     }
 }

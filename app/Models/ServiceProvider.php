@@ -53,26 +53,10 @@ class ServiceProvider extends Model
     }
 
     /**
-     * 🔹 Relation: ServiceProvider has one Availability
-     */
-    public function availability()
-    {
-        return $this->hasOne(Availability::class, 'service_provider_id');
-    }
-
-    /**
      * 🔹 Relation: ServiceProvider has many Services & Pricing
      */
     public function servicesAndPricing()
     {
         return $this->hasMany(ServiceAndPricing::class, 'service_provider_id');
-    }
-
-    /**
-     * 🔹 Relation: ServiceProvider has one EnableLocation
-     */
-    public function enableLocation()
-    {
-        return $this->hasOne(EnableLocation::class, 'service_provider_id');
     }
 }

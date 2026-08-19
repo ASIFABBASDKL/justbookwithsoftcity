@@ -9,63 +9,6 @@ use Illuminate\Support\Facades\Http;
 
 class ChatWithAiController extends Controller
 {
-    //
-
-    // public function chatWithAiStore(Request $request)
-    // {
-    //     $request->validate([
-    //         'user_id' => 'required|exists:users,id',
-    //         'message' => 'nullable|string',
-    //         'voice_path' => 'nullable|string',
-    //     ]);
-
-    //     // 🔹 Auto Reply Logic
-    //     $reply = "I'm here to help you."; // default reply
-    //     if ($request->message) {
-    //         $msg = strtolower(trim($request->message));
-
-    //         if ($msg === "hello") {
-    //             $reply = "How can I assist you?";
-    //         } elseif ($msg === "hi") {
-    //             $reply = "Hello! How’s your day going?";
-    //         } elseif ($msg === "bye") {
-    //             $reply = "Goodbye! Have a nice day.";
-    //         } else {
-    //             $reply = "I got your message: \"$msg\"";
-    //         }
-    //     } elseif ($request->voice_path) {
-    //         $reply = "I received your voice message. Processing soon!";
-    //     }
-
-    //     // 🔹 Check if record already exists for this user
-    //     $chat = ChatWithAi::where('user_id', $request->user_id)->first();
-
-    //     if ($chat) {
-    //         // Update existing record → append new values
-    //         $chat->update([
-    //             'voice_path' => array_merge($chat->voice_path ?? [], $request->voice_path ? [$request->voice_path] : []),
-    //             'transcribed_text' => array_merge($chat->transcribed_text ?? [], $request->message ? [$request->message] : []),
-    //             'message' => array_merge($chat->message ?? [], $request->message ? [$request->message] : []),
-    //             'response_text' => array_merge($chat->response_text ?? [], [$reply]),
-    //         ]);
-    //     } else {
-    //         // Create new record for this user
-    //         $chat = ChatWithAi::create([
-    //             'user_id' => $request->user_id,
-    //             'voice_path' => $request->voice_path ? [$request->voice_path] : [],
-    //             'transcribed_text' => $request->message ? [$request->message] : [],
-    //             'message' => $request->message ? [$request->message] : [],
-    //             'response_text' => [$reply],
-    //         ]);
-    //     }
-
-    //     return response()->json([
-    //         'status' => true,
-    //         'message' => 'Chat stored successfully',
-    //         'data' => $chat
-    //     ], 200);
-    // }
-
     public function chatWithAiStore(Request $request)
     {
         $request->validate([

@@ -18,11 +18,8 @@ class DatabaseSeeder extends Seeder
         $this->call(UserSeeder::class);
         $this->call(ServiceProviderSeeder::class);
         $this->call(ServiceUserSeeder::class);
-        $this->call(AvailabilitySeeder::class);
         $this->call(ServicesAndPricingSeeder::class);
         $this->call(PaymentSeeder::class);
-        $this->call(ServiceAreaSeeder::class);
-        $this->call(EnableLocationSeeder::class);
         $this->call(BookingsSeeder::class);
         $this->call(ServiceUserAndProviderChatSeeder::class);
     }
