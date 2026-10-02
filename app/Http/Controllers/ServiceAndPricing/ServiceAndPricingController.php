@@ -12,6 +12,8 @@ class ServiceAndPricingController extends Controller
     //
     public function storeServiceProvider(Request $request, $providerId)
     {
+        $this->requireOwnProvider((int) $providerId);
+
         $provider = ServiceProvider::findOrFail($providerId);
 
         $data = $request->validate([
@@ -98,6 +100,7 @@ class ServiceAndPricingController extends Controller
     public function updateService(Request $request, $serviceId)
     {
         $service = ServiceAndPricing::findOrFail($serviceId);
+        $this->requireOwnProvider((int) $service->service_provider_id);
     
         $data = $request->validate([
             'category' => 'nullable|string|max:255',
@@ -128,6 +131,8 @@ class ServiceAndPricingController extends Controller
             'message' => 'Service not found',
         ], 404);
     }
+
+    $this->requireOwnProvider((int) $service->service_provider_id);
 
     // ✅ Delete service
     $service->delete();

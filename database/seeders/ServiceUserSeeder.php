@@ -14,7 +14,7 @@ class ServiceUserSeeder extends Seeder
         $faker = Faker::create();
 
         // Sirf un users ko lo jinka role 'user' hai
-        $users = User::where('role', 'user')->get();
+        $users = User::where('is_buyer', true)->get();
 
         foreach ($users as $user) {
             ServiceUser::firstOrCreate(

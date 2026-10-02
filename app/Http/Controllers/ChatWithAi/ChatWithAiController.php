@@ -12,10 +12,11 @@ class ChatWithAiController extends Controller
     public function chatWithAiStore(Request $request)
     {
         $request->validate([
-            'user_id' => 'required|exists:users,id',
             'message' => 'nullable|string',
             'voice' => 'nullable|file|mimes:mp3,wav,m4a',
         ]);
+
+        $userId = $this->authUser()->id;
 
         $reply = "I'm here to help you.";
         $transcribedText = null;
@@ -28,10 +29,11 @@ class ChatWithAiController extends Controller
             $voiceFilePath = storage_path("app/public/" . $voicePath);
 
             if (file_exists($voiceFilePath)) {
-                $geminiApiKey = env('GEMINI_API_KEY');
+                $geminiApiKey = config('services.gemini.api_key');
+                $model = config('services.gemini.model', 'gemini-1.5-flash');
                 $audioBase64 = base64_encode(file_get_contents($voiceFilePath));
 
-                $response = Http::post("https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={$geminiApiKey}", [
+                $response = Http::post("https://generativelanguage.googleapis.com/v1beta/models/{$model}:generateContent?key={$geminiApiKey}", [
                     "contents" => [
                         [
                             "parts" => [
@@ -82,7 +84,7 @@ class ChatWithAiController extends Controller
         }
 
         // 🔹 Check if record exists
-        $chat = ChatWithAi::where('user_id', $request->user_id)->first();
+        $chat = ChatWithAi::where('user_id', $userId)->first();
 
         if ($chat) {
             $chat->update([
@@ -93,7 +95,7 @@ class ChatWithAiController extends Controller
             ]);
         } else {
             $chat = ChatWithAi::create([
-                'user_id' => $request->user_id,
+                'user_id' => $userId,
                 'voice_path' => $voicePath ? [$voicePath] : [],
                 'transcribed_text' => $transcribedText ? [$transcribedText] : [],
                 'message' => $request->message ? [$request->message] : [],

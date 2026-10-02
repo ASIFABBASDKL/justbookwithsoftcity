@@ -13,6 +13,8 @@ class WalletController extends Controller
      */
     public function showWalletApi($service_provider_id)
     {
+        $this->requireOwnProvider((int) $service_provider_id);
+
         $wallet = Wallet::with('serviceProvider')
                         ->where('service_provider_id', $service_provider_id)
                         ->first();

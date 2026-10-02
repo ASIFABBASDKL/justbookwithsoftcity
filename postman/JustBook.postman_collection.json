@@ -1,0 +1,29 @@
+{
+  "info": {
+    "name": "JustBook API",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "base", "value": "http://localhost:8000/api" },
+    { "key": "token", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        { "name": "Register", "request": { "method": "POST", "header": [{ "key": "Accept", "value": "application/json" }], "url": "{{base}}/register-api", "body": { "mode": "raw", "raw": "{\n  \"fullname\": \"Test\",\n  \"email\": \"a@example.com\",\n  \"phone_number\": \"03001112233\",\n  \"password\": \"secret12\",\n  \"as_seller\": true\n}" } } },
+        { "name": "Login", "request": { "method": "POST", "header": [{ "key": "Accept", "value": "application/json" }], "url": "{{base}}/login-api", "body": { "mode": "raw", "raw": "{\n  \"email\": \"a@example.com\",\n  \"password\": \"secret12\"\n}" } } },
+        { "name": "Me", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Accept", "value": "application/json" }], "url": "{{base}}/me" } }
+      ]
+    },
+    {
+      "name": "Marketplace",
+      "item": [
+        { "name": "Category tree", "request": { "method": "GET", "url": "{{base}}/taxonomy/categories" } },
+        { "name": "Gig list", "request": { "method": "GET", "url": "{{base}}/gigs" } },
+        { "name": "Create order", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }], "url": "{{base}}/orders", "body": { "mode": "raw", "raw": "{ \"gig_package_id\": 1 }" } } },
+        { "name": "Pay order", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{base}}/orders/1/pay" } }
+      ]
+    }
+  ]
+}

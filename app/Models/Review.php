@@ -22,6 +22,11 @@ class Review extends Model
         'reliability',
         'comment',
         'is_visible',
+        'order_id',
+        'reviewer_id',
+        'reviewee_id',
+        'reviewer_type',
+        'is_public',
     ];
 
     /* --------------------------

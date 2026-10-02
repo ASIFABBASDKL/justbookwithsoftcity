@@ -19,13 +19,13 @@ class BookingController extends Controller
     //
     public function getBookingsApi(Request $request)
     {
-        $request->validate([
-            'service_provider_id' => 'required|exists:service_providers,id',
-        ]);
+        $providerId = $this->ownServiceProviderId();
+        if (! $providerId) {
+            $this->deny('Only a service provider can view provider bookings.');
+        }
 
-        // ✅ sahi relation names use karo
         $bookings = Booking::with(['serviceUser', 'servicesAndPricing'])
-            ->where('service_provider_id', $request->service_provider_id)
+            ->where('service_provider_id', $providerId)
             ->orderBy('created_at', 'desc')
             ->get();
 
@@ -40,8 +40,7 @@ class BookingController extends Controller
     public function storeBookingApi(Request $request, FirebaseService $firebase)
     {
         $request->validate([
-            'service_user_id' => 'nullable|exists:service_users,id',
-            'service_provider_id' => 'required|exists:service_providers,id',
+            'service_provider_id' => 'required|exists:seller_profiles,id',
             'services_and_pricing_id' => 'required|exists:services_and_pricing,id',
             'booking_date' => 'required|date',
             'booking_time' => 'required',
@@ -61,38 +60,59 @@ class BookingController extends Controller
             'transaction_id' => 'required|string|unique:payment_transactions,transaction_id',
         ]);
 
-        $bookingData = $request->all();
+        $serviceUserId = $this->ownServiceUserId();
+        if (! $serviceUserId) {
+            $this->deny('Only a service user can create a booking.');
+        }
+
+        $bookingData = $request->only([
+            'service_provider_id',
+            'services_and_pricing_id',
+            'booking_date',
+            'booking_time',
+            'address',
+            'frequency',
+            'describe',
+            'location_img',
+            'special_request',
+            'price',
+            'subtotal',
+            'discount',
+            'tax',
+            'service_charges',
+            'emergency_booking',
+            'total_amount',
+            'payment_method',
+        ]);
+        $bookingData['service_user_id'] = $serviceUserId;
         $bookingData['payment_status'] = 'unpaid';
         $bookingData['status'] = 'pending';
 
-        // 1. Create booking
-        $booking = Booking::create($bookingData);
-
-        // 2. Ensure wallet exists (agar nahi hai to create karo)
-        $wallet = $booking->serviceProvider->wallet ?? null;
-
-        if (!$wallet) {
-            $wallet = Wallet::create([
+        [$booking, $transaction] = DB::transaction(function () use ($bookingData, $request) {
+            $booking = Booking::create($bookingData);
+            $wallet = $booking->serviceProvider->wallet ?? null;
+            if (! $wallet) {
+                $wallet = Wallet::create([
+                    'service_provider_id' => $booking->service_provider_id,
+                    'total_amount' => 0.00,
+                    'total_available_amount' => 0.00,
+                    'total_withdrawal_amount' => 0.00,
+                    'pending_clearance' => 0.00,
+                ]);
+            }
+            $transaction = PaymentTransaction::create([
                 'service_provider_id' => $booking->service_provider_id,
-                'total_amount' => 0.00,
-                'total_available_amount' => 0.00,
-                'total_withdrawal_amount' => 0.00,
+                'wallet_id' => $wallet->id,
+                'booking_id' => $booking->id,
+                'transaction_id' => $request->transaction_id,
+                'payment_method' => $booking->payment_method ?? 'cash',
+                'amount' => (float) ($booking->total_amount ?? 0),
+                'status' => 'incoming',
             ]);
-        }
+            $wallet->increment('total_amount', (float) $transaction->amount);
 
-        // 3. Create Payment Transaction (always incoming at booking time)
-        $transaction = PaymentTransaction::create([
-            'service_provider_id' => $booking->service_provider_id,
-            'wallet_id' => $wallet->id,   // ✅ ab hamesha wallet_id available hoga
-            'booking_id' => $booking->id,
-            'transaction_id' => $request->transaction_id,
-            'payment_method' => $booking->payment_method ?? 'cash',
-            'amount' => (float) ($booking->total_amount ?? 0),
-            'status' => 'incoming',
-        ]);
-
-        // 4. Update Wallet (only total_amount increase)
-        $wallet->increment('total_amount', (float) $transaction->amount);
+            return [$booking->fresh(), $transaction];
+        });
 
         // 5. Service User Notification
         if ($booking->serviceUser && $booking->serviceUser->user) {
@@ -148,7 +168,7 @@ class BookingController extends Controller
     {
         $request->validate([
             'booking_id' => 'required|exists:bookings,id',
-            'service_provider_id' => 'required|exists:service_providers,id',
+            'service_provider_id' => 'required|exists:seller_profiles,id',
         ]);
 
         return DB::transaction(function () use ($request, $firebase) {
@@ -157,8 +177,11 @@ class BookingController extends Controller
                 ->lockForUpdate()
                 ->findOrFail($request->booking_id);
 
-            // 🔹 service provider set/update karo
-            $booking->service_provider_id = $request->service_provider_id;
+            $this->requireOwnProvider((int) $booking->service_provider_id);
+
+            if ((int) $request->service_provider_id !== (int) $booking->service_provider_id) {
+                $this->deny();
+            }
 
             $currentStatus = $booking->status;
 
@@ -256,13 +279,13 @@ class BookingController extends Controller
 
     public function getBookingsByUserApi(Request $request)
     {
-        $request->validate([
-            'service_user_id' => 'required|exists:service_users,id',
-        ]);
+        $serviceUserId = $this->ownServiceUserId();
+        if (! $serviceUserId) {
+            $this->deny('Only a service user can view their bookings.');
+        }
 
-        // 🔹 Sirf us user ki bookings lao
         $bookings = Booking::with(['serviceProvider', 'servicesAndPricing'])
-            ->where('service_user_id', $request->service_user_id)
+            ->where('service_user_id', $serviceUserId)
             ->orderBy('created_at', 'desc')
             ->get();
 

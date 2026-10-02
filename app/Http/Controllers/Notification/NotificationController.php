@@ -25,7 +25,8 @@ class NotificationController extends Controller
             'title' => 'required|string',
             'body' => 'required|string',
         ]);
-       
+
+        $this->requireOwnUserId((int) ($request->user_id ?? $this->authUser()->id)); 
         return $this->firebase->sendNotification(
             $request->device_token,
             $request->title,
@@ -37,6 +38,8 @@ class NotificationController extends Controller
     // 🔹 Get All Notifications of Single User
     public function getUserNotifications($userId)
     {
+        $this->requireOwnUserId((int) $userId);
+
         $notifications = Notification::where('user_id', $userId)
             ->orderBy('created_at', 'desc')
             ->get();

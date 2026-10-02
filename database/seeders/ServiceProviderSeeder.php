@@ -14,7 +14,7 @@ class ServiceProviderSeeder extends Seeder
         $faker = Faker::create();
 
         // Sirf un users ko lo jinka role provider hai
-        $providers = User::where('role', 'provider')->get();
+        $providers = User::where('is_seller', true)->get();
 
         foreach ($providers as $user) {
             ServiceProvider::firstOrCreate(

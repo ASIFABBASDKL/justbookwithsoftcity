@@ -16,8 +16,8 @@ class ReviewController extends Controller
     {
         $data = $request->validate([
             'booking_id' => 'required|exists:bookings,id',
-            'service_user_id' => 'required|exists:service_users,id',
-            'service_provider_id' => 'required|exists:service_providers,id',
+            'service_user_id' => 'required|exists:buyer_profiles,id',
+            'service_provider_id' => 'required|exists:seller_profiles,id',
             'rating' => 'required|integer|min:1|max:5',
             'satisfaction' => 'nullable|integer|min:1|max:5',
             'response_rate' => 'nullable|integer|min:1|max:5',
@@ -27,6 +27,14 @@ class ReviewController extends Controller
         ]);
 
         // ✅ Prevent duplicate review for same booking by same user
+        $this->requireOwnServiceUser((int) $data['service_user_id']);
+
+        $booking = Booking::findOrFail($data['booking_id']);
+        if ((int) $booking->service_user_id !== (int) $data['service_user_id']
+            || (int) $booking->service_provider_id !== (int) $data['service_provider_id']) {
+            $this->deny('Review does not match this booking.');
+        }
+
         $existingReview = Review::where('booking_id', $data['booking_id'])
             ->where('service_user_id', $data['service_user_id'])
             ->first();
@@ -79,11 +87,12 @@ class ReviewController extends Controller
 
         // 🔹 Calculate averages
         $totalReviews = $reviews->count();
+        $percents = \App\Http\Controllers\Marketplace\MarketplaceReviewController::performancePercents($reviews);
 
-        $avgSatisfaction = round(($reviews->sum('satisfaction') / ($totalReviews * 5)) * 100, 2);
-        $avgResponseRate = round(($reviews->sum('response_rate') / ($totalReviews * 5)) * 100, 2);
-        $avgJobSuccess = round(($reviews->sum('job_success') / ($totalReviews * 5)) * 100, 2);
-        $avgReliability = round(($reviews->sum('reliability') / ($totalReviews * 5)) * 100, 2);
+        $avgSatisfaction = $percents['satisfaction'];
+        $avgResponseRate = $percents['response_rate'];
+        $avgJobSuccess = $percents['job_success'];
+        $avgReliability = $percents['reliability'];
 
         return response()->json([
             'status' => true,

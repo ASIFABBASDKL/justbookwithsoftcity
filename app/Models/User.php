@@ -5,48 +5,47 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Laravel\Sanctum\HasApiTokens;
+use Spatie\Permission\Traits\HasRoles;
 
 class User extends Authenticatable
 {
-    use HasFactory, Notifiable;
+    use HasApiTokens, HasFactory, HasRoles, Notifiable;
 
-    /**
-     * The attributes that are mass assignable.
-     */
     protected $fillable = [
         'fullname',
+        'username',
         'email',
         'phone_number',
         'password',
-        'role',
+        'is_buyer',
+        'is_seller',
         'email_verified_at',
         'phone_verified_at',
-        'device_token', // ✅ new field
+        'device_token',
+        'avatar',
+        'country',
+        'timezone',
+        'last_seen_at',
     ];
 
-    /**
-     * The attributes that should be hidden for arrays.
-     */
     protected $hidden = [
         'password',
         'remember_token',
     ];
 
-    /**
-     * The attributes that should be cast.
-     */
     protected $casts = [
         'email_verified_at' => 'datetime',
         'phone_verified_at' => 'datetime',
+        'last_seen_at' => 'datetime',
         'password' => 'hashed',
+        'is_buyer' => 'boolean',
+        'is_seller' => 'boolean',
     ];
 
-    /* --------------------------------
-     | 📱 Phone Verification Helpers
-     -------------------------------- */
     public function hasVerifiedPhone(): bool
     {
-        return !is_null($this->phone_verified_at);
+        return ! is_null($this->phone_verified_at);
     }
 
     public function markPhoneAsVerified(): bool
@@ -56,12 +55,9 @@ class User extends Authenticatable
         ])->save();
     }
 
-    /* --------------------------------
-     | 📧 Email Verification Helpers
-     -------------------------------- */
     public function hasVerifiedEmail(): bool
     {
-        return !is_null($this->email_verified_at);
+        return ! is_null($this->email_verified_at);
     }
 
     public function markEmailAsVerified(): bool
@@ -71,16 +67,61 @@ class User extends Authenticatable
         ])->save();
     }
 
-    /* --------------------------------
-     | 🔗 Relations
-     -------------------------------- */
+    public function buyerProfile()
+    {
+        return $this->hasOne(BuyerProfile::class, 'user_id');
+    }
+
+    public function sellerProfile()
+    {
+        return $this->hasOne(SellerProfile::class, 'user_id');
+    }
+
+    /** @deprecated Use buyerProfile() */
     public function serviceUser()
     {
-        return $this->hasOne(ServiceUser::class, 'user_id');
+        return $this->buyerProfile();
     }
-    
+
+    /** @deprecated Use sellerProfile() */
     public function serviceProvider()
     {
-        return $this->hasOne(ServiceProvider::class, 'user_id');
+        return $this->sellerProfile();
+    }
+
+    public function ensureBuyerProfile(): BuyerProfile
+    {
+        $this->forceFill(['is_buyer' => true])->save();
+
+        return $this->buyerProfile()->firstOrCreate(['user_id' => $this->id]);
+    }
+
+    public function becomeSeller(): SellerProfile
+    {
+        $this->forceFill([
+            'is_buyer' => true,
+            'is_seller' => true,
+        ])->save();
+
+        $this->ensureBuyerProfile();
+
+        $profile = $this->sellerProfile()->firstOrCreate(
+            ['user_id' => $this->id],
+            ['level' => 'new']
+        );
+
+        Wallet::firstOrCreate(
+            ['service_provider_id' => $profile->id],
+            [
+                'total_amount' => 0.00,
+                'total_available_amount' => 0.00,
+                'total_withdrawal_amount' => 0.00,
+                'pending_clearance' => 0.00,
+            ]
+        );
+
+        app(\App\Services\ConnectService::class)->ensure($profile);
+
+        return $profile->load('wallet');
     }
 }

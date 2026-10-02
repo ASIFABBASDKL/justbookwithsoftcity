@@ -16,6 +16,7 @@ class Wallet extends Model
         'total_amount',
         'total_available_amount',
         'total_withdrawal_amount',
+        'pending_clearance',
     ];
 
     /**

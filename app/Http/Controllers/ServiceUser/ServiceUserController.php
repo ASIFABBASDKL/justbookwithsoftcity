@@ -11,8 +11,9 @@ class ServiceUserController extends Controller
 {
     public function updateServiceUserApi(Request $request, $id)
     {
+        $this->requireOwnServiceUser((int) $id);
+
         $request->validate([
-            'user_id' => 'required|exists:users,id',
             'img' => 'nullable|string',
             'gender' => 'nullable|string',
             'preferred_language' => 'nullable|string',
@@ -26,7 +27,15 @@ class ServiceUserController extends Controller
         $serviceUser = ServiceUser::findOrFail($id);
 
         // Update record
-        $serviceUser->update($request->all());
+        $serviceUser->update($request->only([
+            'img',
+            'gender',
+            'preferred_language',
+            'location',
+            'enable_ai_voice_assistant',
+            'notifications',
+            'recommendations',
+        ]));
 
         return response()->json([
             'status' => true,
@@ -36,7 +45,8 @@ class ServiceUserController extends Controller
     }
     public function userSummary($serviceUserId)
     {
-        // ✅ Service User find karo with relation to User
+        $this->requireOwnServiceUser((int) $serviceUserId);
+
         $serviceUser = ServiceUser::with('user')->findOrFail($serviceUserId);
 
         return response()->json([
@@ -55,7 +65,8 @@ class ServiceUserController extends Controller
 
     public function updateProfileSummary(Request $request, $serviceUserId)
     {
-        // 🔹 Service user find with related user
+        $this->requireOwnServiceUser((int) $serviceUserId);
+
         $serviceUser = ServiceUser::with('user')->findOrFail($serviceUserId);
         $user = $serviceUser->user;
 

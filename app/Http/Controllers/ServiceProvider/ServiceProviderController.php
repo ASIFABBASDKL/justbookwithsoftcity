@@ -18,10 +18,11 @@ class ServiceProviderController extends Controller
      */
     public function updateServiceProviderApi(Request $request, $id)
     {
+        $this->requireOwnProvider((int) $id);
+
         $serviceProvider = ServiceProvider::findOrFail($id);
 
         $data = $request->validate([
-            'user_id' => 'required|exists:users,id',   // ✅ user_id bhi allow
             'business_name' => 'nullable|string|max:255',
             'category' => 'nullable|string|max:255',
             'service_type' => 'nullable|string|max:255',
@@ -48,7 +49,8 @@ class ServiceProviderController extends Controller
 
     public function updateProfileApi(Request $request, $providerId)
     {
-        // ✅ Provider with user
+        $this->requireOwnProvider((int) $providerId);
+
         $serviceProvider = ServiceProvider::with('user')->findOrFail($providerId);
         $user = $serviceProvider->user;
 
@@ -110,7 +112,8 @@ class ServiceProviderController extends Controller
     }
     public function todayEarningsAndReviews($providerId)
     {
-        // ✅ Provider exist check
+        $this->requireOwnProvider((int) $providerId);
+
         $provider = ServiceProvider::findOrFail($providerId);
 
         // -----------------------------

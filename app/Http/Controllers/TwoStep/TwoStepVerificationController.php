@@ -10,9 +10,13 @@ use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Mail;
 use Carbon\Carbon;
 use App\Mail\EmailOtpMail; // Make sure you have this Mailable
+use App\Services\SmsService;
 
 class TwoStepVerificationController extends Controller
 {
+    public function __construct(protected SmsService $sms)
+    {
+    }
     /**
      * 🔹 Send OTP to email and phone
      */
@@ -95,7 +99,7 @@ class TwoStepVerificationController extends Controller
 
         // 🔹 Send email OTP
         Mail::to($email)->send(new EmailOtpMail($emailOtp));
-        // TODO: Send phone OTP via SMS provider
+        $this->sms->sendOtp($phone, (string) $phoneOtp);
 
         return response()->json([
             'status' => true,
@@ -105,8 +109,6 @@ class TwoStepVerificationController extends Controller
             'device_name' => $twoStep->device_name,
             'old_device_id' => $twoStep->old_device_id,
             'old_device_name' => $twoStep->old_device_name,
-            'email_otp' => $emailOtp,  // 🔹 testing only
-            'phone_otp' => $phoneOtp,  // 🔹 testing only
         ], 200);
     }
     /**
@@ -221,7 +223,7 @@ class TwoStepVerificationController extends Controller
     }
     public function getTwoStepStatus($user_id)
     {
-        // 🔹 Validate user_id exists
+        $this->requireOwnUserId((int) $user_id);
         if (!User::where('id', $user_id)->exists()) {
             return response()->json([
                 'status' => false,
@@ -258,7 +260,8 @@ class TwoStepVerificationController extends Controller
     }
     public function deactivateTwoStepStatus($user_id)
     {
-        // 🔹 Check if user exists
+        $this->requireOwnUserId((int) $user_id);
+
         $user = User::find($user_id);
         if (!$user) {
             return response()->json([

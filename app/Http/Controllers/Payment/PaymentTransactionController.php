@@ -12,14 +12,16 @@ class PaymentTransactionController extends Controller
     public function transactionStore(Request $request)
     {
         $data = $request->validate([
-            'service_provider_id' => 'required|exists:service_providers,id',
+            'service_provider_id' => 'required|exists:seller_profiles,id',
             'booking_id' => 'required|exists:bookings,id',
             'transaction_id' => 'required|string|unique:payment_transactions,transaction_id',
             'payment_method' => 'required|in:credit_card,debit_card,paypal,stripe,cash,bank_transfer',
             'amount' => 'required|numeric|min:0',
             'status' => 'in:incoming,withdraw',
-            'account_number' => 'nullable|string|max:50', // ✅ new field
+            'account_number' => 'nullable|string|max:50',
         ]);
+
+        $this->requireOwnProvider((int) $data['service_provider_id']);
 
         // 🔹 Ensure wallet exists
         $wallet = Wallet::firstOrCreate(
@@ -68,13 +70,15 @@ class PaymentTransactionController extends Controller
     public function withdraw(Request $request)
     {
         $data = $request->validate([
-            'service_provider_id' => 'required|exists:service_providers,id',
+            'service_provider_id' => 'required|exists:seller_profiles,id',
             'wallet_id' => 'required|exists:wallets,id',
             'transaction_id' => 'required|string|unique:payment_transactions,transaction_id',
             'account_number' => 'required|string|max:50',
             'amount' => 'required|numeric|min:1',
             'payment_method' => 'required|in:credit_card,debit_card,paypal,stripe,cash,bank_transfer',
         ]);
+
+        $this->requireOwnProvider((int) $data['service_provider_id']);
 
         // 🔹 Find wallet
         $wallet = Wallet::with('serviceProvider')->find($data['wallet_id']);
@@ -130,7 +134,8 @@ class PaymentTransactionController extends Controller
 
     public function getAllTransactions($serviceProviderId)
     {
-        // ✅ Ensure provider exists (optional validation if needed)
+        $this->requireOwnProvider((int) $serviceProviderId);
+
         $transactions = PaymentTransaction::with(['wallet', 'booking'])
             ->where('service_provider_id', $serviceProviderId)
             ->orderBy('created_at', 'desc')

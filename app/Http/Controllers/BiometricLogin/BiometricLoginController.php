@@ -6,7 +6,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\BiometricLogin;
 use App\Models\User;
-use Illuminate\Support\Str;
+use App\Http\Controllers\Auth\AuthController;
 
 class BiometricLoginController extends Controller
 {
@@ -16,16 +16,14 @@ class BiometricLoginController extends Controller
     public function store(Request $request)
     {
         $request->validate([
-            'user_id' => 'required|exists:users,id',
             'device_id' => 'required|string|max:255',
             'device_name' => 'required|string|max:255',
-            'biometric_token' => 'required|string|max:255', // ✅ ab token request se aayega
+            'biometric_token' => 'required|string|max:255',
         ]);
 
-        // ✅ Create or Update record
         $record = BiometricLogin::updateOrCreate(
             [
-                'user_id' => $request->user_id,
+                'user_id' => $this->authUser()->id,
                 'device_id' => $request->device_id,
             ],
             [
@@ -67,33 +65,19 @@ class BiometricLoginController extends Controller
     // ✅ Get user with relations (same as loginApi)
     $user = User::with(['serviceProvider.wallet', 'serviceUser'])->find($record->user_id);
 
-    // ✅ Prepare response
-    $responseData = [
-        'user' => $user,
-    ];
-
-    if ($user->role === 'provider' && $user->serviceProvider) {
-        $responseData['service_provider'] = $user->serviceProvider;
-        $responseData['wallet'] = $user->serviceProvider->wallet ?? null;
-    } elseif ($user->role === 'user' && $user->serviceUser) {
-        $responseData['service_user'] = $user->serviceUser;
-    }
+    $payload = app(AuthController::class)->issueTokenPayload($user);
 
     return response()->json([
         'status' => true,
         'message' => 'Biometric login successful',
-        'data' => $responseData,
+        'data' => $payload,
     ], 200);
 }
 
 
     public function deactivate(Request $request)
     {
-        $request->validate([
-            'user_id' => 'required|exists:users,id',
-        ]);
-
-        $record = BiometricLogin::where('user_id', $request->user_id)->first();
+        $record = BiometricLogin::where('user_id', $this->authUser()->id)->first();
 
         if (!$record) {
             return response()->json([

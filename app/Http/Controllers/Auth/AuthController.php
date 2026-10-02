@@ -3,22 +3,24 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
-use App\Models\User;
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Mail;
 use App\Mail\EmailOtpMail;
 use App\Mail\PasswordResetOtpMail;
 use App\Mail\PasswordResetSuccessMail;
-use App\Models\ServiceProvider;
-use App\Models\Wallet;
-use App\Models\ServiceUser;
+use App\Models\BuyerProfile;
+use App\Models\SellerProfile;
+use App\Models\User;
+use App\Services\SmsService;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Str;
+
 class AuthController extends Controller
 {
-    /**
-     * Register API - create a new user (API).
-     */
+    public function __construct(protected SmsService $sms)
+    {
+    }
+
     public function registerApi(Request $request)
     {
         $request->validate([
@@ -26,62 +28,54 @@ class AuthController extends Controller
             'email' => 'required|string|email|max:255|unique:users',
             'phone_number' => 'required|string|max:20|unique:users',
             'password' => 'required|string|min:6',
-            'role' => 'in:user,provider',
+            'role' => 'nullable|in:user,provider',
+            'as_seller' => 'sometimes|boolean',
             'device_token' => 'nullable|string|max:500',
         ]);
-    
+
+        $asSeller = $request->boolean('as_seller') || $request->input('role') === 'provider';
+
         $user = User::create([
             'fullname' => $request->fullname,
             'email' => $request->email,
             'phone_number' => $request->phone_number,
-            'password' => Hash::make($request->password),
-            'role' => $request->role ?? 'user',
+            'password' => $request->password,
+            'is_buyer' => true,
+            'is_seller' => $asSeller,
             'device_token' => $request->device_token,
+            'timezone' => 'UTC',
         ]);
-    
-        // ✅ Prepare response data
+
+        $user->username = $this->uniqueUsername($user);
+        $user->save();
+
+        $buyer = $user->ensureBuyerProfile();
         $responseData = [
-            'user' => $user,
+            'user' => $user->fresh(),
+            'buyer_profile' => $buyer,
+            'service_user' => $buyer,
         ];
-    
-        if ($user->role === 'provider') {
-            $serviceProvider = ServiceProvider::create([
-                'user_id' => $user->id,
-            ]);
-    
-            $wallet = Wallet::create([
-                'service_provider_id' => $serviceProvider->id,
-                'total_amount' => 0.00,
-                'total_available_amount' => 0.00,
-                'total_withdrawal_amount' => 0.00,
-            ]);
-    
-            $responseData['service_provider'] = $serviceProvider;
-            $responseData['wallet'] = $wallet;
-        } else {
-            $serviceUser = ServiceUser::create([
-                'user_id' => $user->id,
-            ]);
-    
-            $responseData['service_user'] = $serviceUser;
+
+        if ($asSeller) {
+            $seller = $user->becomeSeller();
+            $responseData['seller_profile'] = $seller;
+            $responseData['service_provider'] = $seller;
+            $responseData['wallet'] = $seller->wallet;
         }
-    
-        // ✅ Phone OTP
-        $phoneOtp = rand(100000, 999999);
+
+        $phoneOtp = (string) random_int(100000, 999999);
         cache()->put("phone_otp_{$user->phone_number}", $phoneOtp, now()->addMinutes(10));
-    
-        // ✅ Email OTP
-        $emailOtp = rand(100000, 999999);
+        $this->sms->sendOtp($user->phone_number, $phoneOtp);
+
+        $emailOtp = (string) random_int(100000, 999999);
         cache()->put("email_otp_{$user->email}", $emailOtp, now()->addMinutes(10));
         Mail::to($user->email)->send(new EmailOtpMail($emailOtp));
-    
+
         return response()->json([
             'status' => true,
             'message' => 'User registered successfully. Verify your phone & email.',
-            'phone_otp' => $phoneOtp,   // sirf testing ke liye
-            'email_otp' => $emailOtp,   // sirf testing ke liye
             'data' => $responseData,
-        ], 200);
+        ], 201);
     }
 
     public function verifyEmail(Request $request)
@@ -93,7 +87,7 @@ class AuthController extends Controller
 
         $cachedOtp = cache()->get("email_otp_{$request->email}");
 
-        if ($cachedOtp && $cachedOtp == $request->otp) {
+        if ($cachedOtp && (string) $cachedOtp === (string) $request->otp) {
             $user = User::where('email', $request->email)->first();
             $user->email_verified_at = now();
             $user->save();
@@ -110,8 +104,9 @@ class AuthController extends Controller
         return response()->json([
             'status' => false,
             'message' => 'Invalid or expired OTP',
-        ], 404);
+        ], 422);
     }
+
     public function verifyPhone(Request $request)
     {
         $request->validate([
@@ -121,9 +116,9 @@ class AuthController extends Controller
 
         $cachedOtp = cache()->get("phone_otp_{$request->phone_number}");
 
-        if ($cachedOtp && $cachedOtp == $request->otp) {
+        if ($cachedOtp && (string) $cachedOtp === (string) $request->otp) {
             $user = User::where('phone_number', $request->phone_number)->first();
-            $user->markPhoneAsVerified(); // ✅ Model method
+            $user->markPhoneAsVerified();
 
             cache()->forget("phone_otp_{$request->phone_number}");
 
@@ -137,12 +132,9 @@ class AuthController extends Controller
         return response()->json([
             'status' => false,
             'message' => 'Invalid or expired OTP',
-        ], 404);
+        ], 422);
     }
-    /**
-     * Login API - authenticate a user (API).
-     **/
-     
+
     public function loginApi(Request $request)
     {
         $request->validate([
@@ -150,55 +142,59 @@ class AuthController extends Controller
             'password' => 'required',
             'device_token' => 'nullable|string|max:500',
         ]);
-    
-        if (Auth::attempt($request->only('email', 'password'))) {
-            $user = Auth::user();
-    
-            // ✅ Prevent login if phone is not verified
-            if (!$user->hasVerifiedPhone()) {
-                Auth::logout();
-                return response()->json([
-                    'status' => false,
-                    'message' => 'Please verify your phone number before login.',
-                ], 403);
-            }
-    
-            // ✅ Update device token
-            if ($request->filled('device_token') && $user->device_token !== $request->device_token) {
-                $user->update(['device_token' => $request->device_token]);
-            }
-    
-            // ✅ Eager load relations
-            $user->load([
-                'serviceProvider.wallet', // provider + wallet
-                'serviceUser',            // user
-            ]);
-    
-            // ✅ Prepare response
-            $responseData = [
-                'user' => $user,
-            ];
-    
-            if ($user->role === 'provider' && $user->serviceProvider) {
-                $responseData['service_provider'] = $user->serviceProvider;
-                $responseData['wallet'] = $user->serviceProvider->wallet ?? null;
-            } elseif ($user->role === 'user' && $user->serviceUser) {
-                $responseData['service_user'] = $user->serviceUser;
-            }
-    
+
+        $user = User::where('email', $request->email)->first();
+
+        if (! $user || ! Hash::check($request->password, $user->password)) {
             return response()->json([
-                'status' => true,
-                'message' => 'Login successful',
-                'data' => $responseData,
-            ], 200);
+                'status' => false,
+                'message' => 'Invalid credentials',
+            ], 401);
         }
-    
+
+        if (! $user->hasVerifiedPhone()) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Please verify your phone number before login.',
+            ], 403);
+        }
+
+        if ($request->filled('device_token') && $user->device_token !== $request->device_token) {
+            $user->update(['device_token' => $request->device_token]);
+        }
+
+        $user->forceFill(['last_seen_at' => now()])->save();
+
         return response()->json([
-            'status' => false,
-            'message' => 'Invalid credentials',
-        ], 404);
+            'status' => true,
+            'message' => 'Login successful',
+            'data' => $this->issueTokenPayload($user),
+        ], 200);
     }
 
+    public function logoutApi(Request $request)
+    {
+        $token = $request->user()->currentAccessToken();
+
+        if ($token instanceof \Laravel\Sanctum\PersonalAccessToken) {
+            $token->delete();
+        }
+
+        return response()->json([
+            'status' => true,
+            'message' => 'Logged out successfully',
+        ], 200);
+    }
+
+    public function me(Request $request)
+    {
+        $user = $request->user()->load(['serviceProvider.wallet', 'serviceUser']);
+
+        return response()->json([
+            'status' => true,
+            'data' => $this->profilePayload($user),
+        ], 200);
+    }
 
     public function forgotPassword(Request $request)
     {
@@ -206,13 +202,8 @@ class AuthController extends Controller
             'email' => 'required|email|exists:users,email',
         ]);
 
-        // Generate 4 digit OTP
-        $otp = rand(1000, 9999);
-
-        // Cache me store karo (10 min expiry)
+        $otp = (string) random_int(1000, 9999);
         cache()->put("password_reset_{$request->email}", $otp, now()->addMinutes(10));
-
-        // Mail bhejna
         Mail::to($request->email)->send(new PasswordResetOtpMail($otp));
 
         return response()->json([
@@ -220,7 +211,7 @@ class AuthController extends Controller
             'message' => 'OTP sent to your email address',
         ], 200);
     }
-    
+
     public function verifyPasswordOtp(Request $request)
     {
         $request->validate([
@@ -230,8 +221,7 @@ class AuthController extends Controller
 
         $cachedOtp = cache()->get("password_reset_{$request->email}");
 
-        if ($cachedOtp && $cachedOtp == $request->otp) {
-            // OTP valid
+        if ($cachedOtp && (string) $cachedOtp === (string) $request->otp) {
             return response()->json([
                 'status' => true,
                 'message' => 'OTP verified successfully. You can now reset your password.',
@@ -241,7 +231,7 @@ class AuthController extends Controller
         return response()->json([
             'status' => false,
             'message' => 'Invalid or expired OTP',
-        ], 200);
+        ], 422);
     }
 
     public function resetPassword(Request $request)
@@ -254,15 +244,14 @@ class AuthController extends Controller
 
         $cachedOtp = cache()->get("password_reset_{$request->email}");
 
-        if ($cachedOtp && $cachedOtp == $request->otp) {
+        if ($cachedOtp && (string) $cachedOtp === (string) $request->otp) {
             $user = User::where('email', $request->email)->first();
-            $user->password = Hash::make($request->password);
+            $user->password = $request->password;
             $user->save();
 
-            // OTP hatado
             cache()->forget("password_reset_{$request->email}");
+            $user->tokens()->delete();
 
-            // ✅ Confirmation email bhejo
             Mail::to($user->email)->send(new PasswordResetSuccessMail($user));
 
             return response()->json([
@@ -274,38 +263,44 @@ class AuthController extends Controller
         return response()->json([
             'status' => false,
             'message' => 'Invalid or expired OTP',
-        ], 200);
+        ], 422);
     }
+
     public function changePassword(Request $request)
     {
         $request->validate([
-            'user_id' => 'required|exists:users,id',
             'old_password' => 'required|string',
             'new_password' => 'required|string|min:6|confirmed',
         ]);
 
-        $user = User::findOrFail($request->user_id);
+        $user = $request->user();
 
-        // Check old password
-        if (!Hash::check($request->old_password, $user->password)) {
+        if (! Hash::check($request->old_password, $user->password)) {
             return response()->json([
                 'status' => false,
                 'message' => 'Old password does not match',
-            ], 200);
+            ], 422);
         }
 
-        // Update new password
-        $user->password = Hash::make($request->new_password);
+        $user->password = $request->new_password;
         $user->save();
+
+        $current = $user->currentAccessToken();
+        if ($current instanceof \Laravel\Sanctum\PersonalAccessToken) {
+            $user->tokens()->where('id', '!=', $current->id)->delete();
+        }
 
         return response()->json([
             'status' => true,
             'message' => 'Password changed successfully',
         ], 200);
     }
+
     public function getProviderDeviceToken($id)
     {
-        $provider = ServiceProvider::with('user')->find($id);
+        $this->requireOwnProvider((int) $id);
+
+        $provider = SellerProfile::with('user')->find($id);
         $token = $provider?->user?->device_token;
 
         return response()->json([
@@ -313,9 +308,12 @@ class AuthController extends Controller
             'device_token' => $token,
         ], 200);
     }
+
     public function getServiceUserDeviceToken($id)
     {
-        $serviceUser = ServiceUser::with('user')->find($id);
+        $this->requireOwnServiceUser((int) $id);
+
+        $serviceUser = BuyerProfile::with('user')->find($id);
         $token = $serviceUser?->user?->device_token;
 
         return response()->json([
@@ -324,30 +322,78 @@ class AuthController extends Controller
         ], 200);
     }
 
-
-    // Fetch all Service Users
     public function getAllServiceUsers()
     {
-        $users = ServiceUser::with('user')->get();
-    
+        $users = BuyerProfile::with('user')->get();
+
         return response()->json([
             'status' => true,
             'message' => 'All service users fetched successfully.',
             'data' => $users,
         ], 200);
     }
-    
-    // Fetch all Service Providers (with wallet + user)
+
     public function getAllServiceProviders()
     {
-        $providers = ServiceProvider::with(['user', 'wallet'])->get();
-    
+        $providers = SellerProfile::with(['user', 'wallet'])->get();
+
         return response()->json([
             'status' => true,
             'message' => 'All service providers fetched successfully.',
             'data' => $providers,
         ], 200);
     }
-    
 
+    /**
+     * @return array<string, mixed>
+     */
+    public function issueTokenPayload(User $user, string $tokenName = 'api'): array
+    {
+        $user->tokens()->where('name', $tokenName)->delete();
+        $plain = $user->createToken($tokenName)->plainTextToken;
+        $user->load(['sellerProfile.wallet', 'buyerProfile']);
+
+        return array_merge($this->profilePayload($user), [
+            'token' => $plain,
+            'token_type' => 'Bearer',
+        ]);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function profilePayload(User $user): array
+    {
+        $user->loadMissing(['sellerProfile.wallet', 'buyerProfile']);
+
+        $payload = [
+            'user' => $user,
+            'buyer_profile' => $user->buyerProfile,
+            'service_user' => $user->buyerProfile,
+            'is_buyer' => (bool) $user->is_buyer,
+            'is_seller' => (bool) $user->is_seller,
+        ];
+
+        if ($user->is_seller && $user->sellerProfile) {
+            $payload['seller_profile'] = $user->sellerProfile;
+            $payload['service_provider'] = $user->sellerProfile;
+            $payload['wallet'] = $user->sellerProfile->wallet ?? null;
+        }
+
+        return $payload;
+    }
+
+    protected function uniqueUsername(User $user): string
+    {
+        $base = Str::slug($user->fullname) ?: 'user';
+        $candidate = $base.$user->id;
+
+        $i = 1;
+        while (User::where('username', $candidate)->where('id', '!=', $user->id)->exists()) {
+            $candidate = $base.$user->id.'-'.$i;
+            $i++;
+        }
+
+        return $candidate;
+    }
 }

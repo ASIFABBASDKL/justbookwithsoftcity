@@ -23,12 +23,14 @@ class ServiceUserAndProviderChatController extends Controller
         ]);
 
         if ($request->sender_type === 'user') {
+            $this->requireOwnServiceUser((int) $request->sender_id);
             $serviceUser = ServiceUser::find($request->sender_id);
             $serviceProvider = ServiceProvider::find($request->receiver_id);
 
             $service_user_id = $serviceUser?->id;
             $service_provider_id = $serviceProvider?->id;
         } else {
+            $this->requireOwnProvider((int) $request->sender_id);
             $serviceProvider = ServiceProvider::find($request->sender_id);
             $serviceUser = ServiceUser::find($request->receiver_id);
 
@@ -83,7 +85,8 @@ class ServiceUserAndProviderChatController extends Controller
 
     public function getChatsByUserId(Request $request, $serviceUserId)
     {
-        // Distinct providers for this user
+        $this->requireOwnServiceUser((int) $serviceUserId);
+
         $providerIds = ServiceUserAndProviderChat::where('service_user_id', $serviceUserId)
             ->distinct()
             ->pluck('service_provider_id');
@@ -105,7 +108,8 @@ class ServiceUserAndProviderChatController extends Controller
     }
     public function getChatsByProviderId(Request $request, $serviceProviderId)
     {
-        // Distinct users for this provider
+        $this->requireOwnProvider((int) $serviceProviderId);
+
         $userIds = ServiceUserAndProviderChat::where('service_provider_id', $serviceProviderId)
             ->distinct()
             ->pluck('service_user_id');
@@ -128,9 +132,16 @@ class ServiceUserAndProviderChatController extends Controller
     public function getMessages(Request $request)
     {
         $request->validate([
-            'service_user_id' => 'required|exists:service_users,id',
-            'service_provider_id' => 'required|exists:service_providers,id',
+            'service_user_id' => 'required|exists:buyer_profiles,id',
+            'service_provider_id' => 'required|exists:seller_profiles,id',
         ]);
+
+        $ownsAsUser = $this->ownServiceUserId() && (int) $this->ownServiceUserId() === (int) $request->service_user_id;
+        $ownsAsProvider = $this->ownServiceProviderId() && (int) $this->ownServiceProviderId() === (int) $request->service_provider_id;
+
+        if (! $ownsAsUser && ! $ownsAsProvider) {
+            $this->deny();
+        }
 
         $chats = ServiceUserAndProviderChat::with(['serviceUser', 'serviceProvider'])
             ->where('service_user_id', $request->service_user_id)

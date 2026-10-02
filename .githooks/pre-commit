@@ -1,0 +1,6 @@
+#!/bin/sh
+# copy to .git/hooks/pre-commit (or: git config core.hooksPath .githooks)
+FILES=$(git diff --cached --name-only --diff-filter=ACMR -- '*.php' | tr '\n' ' ')
+[ -z "$FILES" ] && exit 0
+vendor/bin/pint --dirty
+git add $FILES
